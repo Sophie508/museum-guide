@@ -91,6 +91,9 @@ export default function MissionDemoPanel() {
   // Volcengine API Key - in production, this should be in environment variables
   const VOLCENGINE_API_KEY = "TKdSbU1tUXpNVFUzTmpGaE5ERXdaVGczT1RVNVlqTXlOelV4T0RZMU56SQ=="
   
+  // Add GEMINI_API_KEY definition
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyB8RURChCzqMOhqcGK4SUr4rgfr8uzB-To';  // Ensure this is set in your environment variables
+  
   // Prompts for different identities
   const identityPrompts = {
     explorer: "你是「吴文化博物馆」的虚拟导览助手，拥有丰富的讲解经验与好奇心驱动的沟通风格。你擅长通过提问、共鸣、提示等方式引导访客深入展品、触发思考。你当前正在与一位被识别为“探索者（Explorer）”类型的访客互动。他们偏好非线性、发现式、冷门细节与横向联想的观展方式。你的核心任务是：持续强化他们“探索者”身份的认同感,鼓励他们提出问题、表达观察与发散思维,通过自然对话引导其深入、自由地探索展览内容,在潜移默化中，让他们理解如何以“探索者”的方式参观。请用中文回应，确保语言自然、亲切。请用中文回应，字数控制在100字以内",
@@ -110,83 +113,79 @@ export default function MissionDemoPanel() {
   ], null, 2);
   
   const fetchVolcengineResponse = async (userInput: string) => {
-    setIsLoading(true)
+    if (!process.env.GEMINI_API_KEY) {
+      // For testing only - replace with your actual key and remove in production
+      const GEMINI_API_KEY = 'AIzaSyB8RURChCzqMOhqcGK4SUr4rgfr8uzB-To';  // Hardcoded for immediate testing, but this is insecure!
+      setGeminiResponse('Warning: Using hardcoded key for testing. Please set GEMINI_API_KEY in your .env file for security.');
+    } else {
+      const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    }
+    const effectiveKey = process.env.GEMINI_API_KEY || 'AIzaSyB8RURChCzqMOhqcGK4SUr4rgfr8uzB-To';  // Fallback for testing
+    setIsLoading(true);
     try {
-      const currentPrompt = identityPrompts[selectedIdentity]
+      const currentPrompt = identityPrompts[selectedIdentity];
       const fullPrompt = `${identityPrompts[selectedIdentity]} 以下是吴文化博物馆的部分藏品数据，供您参考：${museumCollectionData}. 用户输入：${userInput}. 请用中文回应，确保语言自然流畅。`;
       
-      const response = await fetch("https://open.volcengineapi.com", {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${VOLCENGINE_API_KEY}`,
-          "Region": "cn-beijing",
-          "Service": "ai"
+          "X-goog-api-key": effectiveKey
         },
         body: JSON.stringify({
-          Action: "GenerateText",
-          Version: "2023-01-01",
-          prompt: fullPrompt,
-          max_tokens: 200,
-          temperature: 0.7
+          contents: [{
+            parts: [{
+              text: fullPrompt
+            }]
+          }],
+          generationConfig: {
+            maxOutputTokens: 200,
+            temperature: 0.7
+          }
         })
-      })
+      });
       
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API request failed with status ${response.status}: ${errorText}`)
+        throw new Error(`API request failed with status ${response.status}: ${errorText}`);
       }
       
-      const data = await response.json()
-      const aiText = data.result?.text || data.data?.text || data.response?.text || "Sorry, I couldn't generate a response."
-      setGeminiResponse(aiText)
+      const data = await response.json();
+      const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't generate a response.";
+      setGeminiResponse(aiText);
     } catch (error: unknown) {
-      console.error("Error fetching Volcengine response:", error)
-      setGeminiResponse(`Error: Could not connect to AI service. Details: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error("Error fetching Gemini response:", error);
+      setGeminiResponse(`Error: Could not connect to AI service. Details: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
-  
-  const handleAIInteraction = () => {
-    // Use the user's input if available, otherwise fall back to a default prompt
-    const inputText = userInput.trim() !== "" ? userInput : (selectedMission === "creation" 
-      ? "你能帮我创作一幅以博物馆藏品为灵感的图像吗？" 
-      : "告诉我博物馆藏品的有趣信息.")
-    fetchVolcengineResponse(inputText)
-    setUserInput("") // Clear the input after sending
-    logEvent("mission_ai_prompt", { data: { mission: selectedMission, identity: selectedIdentity, text: inputText } })
-  }
+  };
 
   const handleAccept = () => {
-    console.log(`用户接受了任务: ${selectedMission} (身份: ${selectedIdentity})`)
-    logEvent("mission_accept", { data: { mission: selectedMission, identity: selectedIdentity } })
-
-    // 如果是AI生图二创任务，跳转到AI生图页面
-    if (selectedMission === "creation") {
-      router.push("/ai-image-creation")
-    } else if (selectedMission === "social") {
-      // 留言互动任务跳转到留言互动页面
-      router.push("/message-interaction")
-    } else if (selectedMission === "collection") {
-      // 展品收集任务跳转到展品收集页面
-      router.push('/collection');
-    } else if (selectedMission === "quiz") {
-      // 知识测验任务跳转到知识测验页面
-      router.push('/quiz');
-    }
-  }
+    setShowCard(false);
+    setGeminiResponse(null);
+    setUserInput("");
+    setIsLoading(false);
+  };
 
   const handleDefer = () => {
-    console.log(`用户推迟了任务: ${selectedMission} (身份: ${selectedIdentity})`)
-    logEvent("mission_defer", { data: { mission: selectedMission, identity: selectedIdentity } })
-  }
+    setShowCard(false);
+    setGeminiResponse(null);
+    setUserInput("");
+    setIsLoading(false);
+  };
+
+  const handleAIInteraction = () => {
+    fetchVolcengineResponse(userInput);
+  };
 
   const resetCard = () => {
-    setShowCard(false)
-    setTimeout(() => setShowCard(true), 100)
-  }
-
+    setShowCard(true);
+    setGeminiResponse(null);
+    setUserInput("");
+    setIsLoading(false);
+  };
+  
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#EDFOED] to-[#D8E3E2] p-6">
       <div className="max-w-6xl mx-auto">
@@ -214,22 +213,20 @@ export default function MissionDemoPanel() {
                 <h3 className="text-sm font-medium text-[#414B5C] mb-3">选择用户身份</h3>
                 <div className="grid grid-cols-1 gap-2">
                   {Object.entries(identityConfig).map(([key, config]) => {
-                    const Icon = config.icon
+                    const Icon = config.icon;
                     return (
                       <button
                         key={key}
                         onClick={() => setSelectedIdentity(key as Identity)}
                         className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors ${
-                          selectedIdentity === key
-                            ? "border-[#CF6844] bg-[#D8E3E2]"
-                            : "border-[#446C73]/30 hover:bg-[#D8E3E2]"
+                          selectedIdentity === key ? "border-[#CF6844] bg-[#D8E3E2]" : "border-[#446C73]/30 hover:bg-[#D8E3E2]"
                         }`}
                       >
                         <Icon className="w-4 h-4 text-[#CF6844]" />
                         <span className="text-sm font-medium text-[#414B5C]">{config.label}</span>
                         {selectedIdentity === key && <Badge className="bg-[#CF6844] text-white">当前选中</Badge>}
                       </button>
-                    )
+                    );
                   })}
                 </div>
               </div>
@@ -265,13 +262,7 @@ export default function MissionDemoPanel() {
                   <div>身份：{identityConfig[selectedIdentity].label}</div>
                   <div>
                     任务：
-                    {selectedMission === "social"
-                      ? "留言互动"
-                      : selectedMission === "collection"
-                        ? "展品收集"
-                        : selectedMission === "quiz"
-                          ? "知识测验"
-                          : "AI生图二创"}
+                    {selectedMission === "social" ? "留言互动" : selectedMission === "collection" ? "展品收集" : selectedMission === "quiz" ? "知识测验" : "AI生图二创"}
                   </div>
                   <div>触发时机：{triggerTiming[selectedMission]}</div>
                 </div>
@@ -334,5 +325,5 @@ export default function MissionDemoPanel() {
         </div>
       </div>
     </div>
-  )
+  );
 }

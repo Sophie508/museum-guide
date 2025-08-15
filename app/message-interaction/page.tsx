@@ -10,21 +10,25 @@ export default function ExhibitListPage() {
   const router = useRouter()
 
   const handleExhibitClick = (id: string) => {
-    router.push(`/message-interaction/${id}`)
-  }
+    router.push(`/message-interaction/${id}`);  // 使用动态路由
+  };
+
+  const handleBack = () => {
+    router.push('/mission-demo');  // 直接跳转到 mission-demo 页面
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#EDFOED] to-[#D8E3E2] p-6">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Navigation Header */}
+        {/* 顶部导航 */}
         <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm p-4 rounded-lg shadow-sm border border-[#446C73]/20">
           <Button
             variant="outline"
-            onClick={() => router.push('/?screen=mission-demo')} // Navigate to the root route with a query parameter to return to the mission demo screen
+            onClick={handleBack}
             className="flex items-center space-x-2 border-[#446C73] text-[#446C73] hover:bg-[#D8E3E2]"
           >
             <ArrowLeft className="w-4 h-4" />
-            返回
+            <span>返回</span>
           </Button>
           <h1 className="text-xl font-bold text-[#414B5C]">展品选择</h1>
         </div>
@@ -59,5 +63,5 @@ export default function ExhibitListPage() {
         </div>
       </div>
     </div>
-  )
+  );
 } 

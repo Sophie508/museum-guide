@@ -10,21 +10,36 @@ import { ArrowLeft, Sparkles, Download, Share2, Heart, RefreshCw, Save } from "l
 import { useRouter } from "next/navigation"
 import { RECREATION_DATA } from "@/data/recreationData"
 import { logEvent } from "@/lib/logEvent"
+import OpenAI from 'openai';  // 确保 OpenAI 包已安装
 
 type Screen = "list" | "detail" | "prompt" | "result"
 
-// 调用后端接口进行AI图片生成（已支持占位上游API）
+// 配置 OpenAI 客户端，选择一个模型
+const openai = new OpenAI({
+  apiKey: process.env.ARK_API_KEY || 'd1fe4420-c82e-421a-8259-7e1e6f1fd9b9',  // 默认使用国内模型，替换为 process.env.ARK_API_KEY 或其他
+  baseURL: process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',  // 或 'https://api.chatanywhere.tech/v1'
+});
+
+// 更新函数以直接使用 OpenAI 客户端生成图片
 async function generateImageOnServer(params: { exhibitId: string; prompt: string; title?: string }) {
-  const res = await fetch("/api/ai/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ exhibitId: params.exhibitId, prompt: params.prompt, title: params.title }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "生成失败");
+  try {
+    const exhibit = RECREATION_DATA.find(item => item.id === params.exhibitId);  // 尝试读取展品图片或数据
+    if (!exhibit) {
+      throw new Error("展品未找到");
+    }
+    const response = await openai.images.generate({
+      prompt: `基于展品 ${exhibit.name} 的图片，${params.prompt}`,  // 整合展品数据到提示
+      n: 1,
+      size: "1024x1024",
+    });
+    return {
+      newTitle: params.title || 'AI 生成图片',
+      newImage: response.data?.[0]?.url || '',  // 确保有默认值
+    };
+  } catch (error) {
+    console.error("API 调用失败:", error);
+    throw new Error("生成图片失败，请检查 API 密钥和模型配置");
   }
-  return (await res.json()) as { newTitle: string; newImage: string };
 }
 
 export default function AIImageCreation() {
@@ -39,67 +54,63 @@ export default function AIImageCreation() {
 
   const handleBack = () => {
     if (currentScreen === "list") {
-      router.push('/?screen=mission-demo')
+      router.push('/mission-demo');  // 确保使用直接路由
     } else if (currentScreen === "detail") {
-      setCurrentScreen("list")
+      setCurrentScreen("list");
     } else if (currentScreen === "prompt") {
-      setCurrentScreen("detail")
+      setCurrentScreen("detail");
     } else if (currentScreen === "result") {
-      setCurrentScreen("prompt")
+      setCurrentScreen("prompt");
     }
-  }
+  };
 
   const handleExhibitSelect = (id: string) => {
-    setSelectedExhibitId(id)
-    setCurrentScreen("detail")
-  }
+    setSelectedExhibitId(id);
+    setCurrentScreen("detail");
+  };
 
   const handleConfirmExhibit = () => {
-    setCurrentScreen("prompt")
-  }
+    setCurrentScreen("prompt");
+  };
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || !selectedExhibitId) return
+    if (!prompt.trim() || !selectedExhibitId) return;
     
-    setIsGenerating(true)
+    setIsGenerating(true);
     try {
-      const result = await generateImageOnServer({ exhibitId: selectedExhibitId, prompt, title: artworkName })
-      setGeneratedImage(result.newImage)
-      setImageTitle(result.newTitle)
-      setCurrentScreen("result")
-      logEvent("ai_image_generated", { data: { exhibitId: selectedExhibitId, prompt, title: artworkName, newImage: result.newImage, newTitle: result.newTitle } })
+      const result = await generateImageOnServer({ exhibitId: selectedExhibitId, prompt, title: artworkName });
+      setGeneratedImage(result.newImage || '');  // 确保有默认值
+      setImageTitle(result.newTitle);
+      setCurrentScreen("result");
+      logEvent("ai_image_generated", { data: { exhibitId: selectedExhibitId, prompt, title: artworkName, newImage: result.newImage, newTitle: result.newTitle } });
     } catch (e) {
-      console.error(e)
-      alert("生成失败，请稍后重试")
+      console.error(e);
+      alert("生成失败，请检查 API 配置");
     } finally {
-      setIsGenerating(false)
+      setIsGenerating(false);
     }
-  }
+  };
 
   const handleDownload = () => {
-    // Simulate downloading image
-    alert('图片已保存')
-    console.log("下载图片")
-  }
+    alert('图片已保存');
+    console.log("下载图片");
+  };
 
   const handleShare = () => {
-    // Share logic placeholder
-    console.log("分享图片")
-  }
+    console.log("分享图片");
+  };
 
   const handleLike = () => {
-    // Like logic placeholder
-    console.log("点赞")
-  }
+    console.log("点赞");
+  };
 
   const handleRegenerate = () => {
-    setCurrentScreen("prompt")
-    setGeneratedImage(null)
-    setImageTitle("")
-  }
+    setCurrentScreen("prompt");
+    setGeneratedImage(null);
+    setImageTitle("");
+  };
 
   const handleSaveResult = (result: any) => {
-    // Simulate saving result
     alert(`已保存作品: ${result.newTitle}`);
     console.log("保存作品", result);
   };
@@ -110,16 +121,10 @@ export default function AIImageCreation() {
       <div className="bg-white/80 backdrop-blur-sm border-b border-[#446C73]/20">
         <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              onClick={handleBack}
-              className="flex items-center space-x-2 text-[#446C73] hover:text-[#414B5C]"
-            >
+            <Button variant="ghost" onClick={handleBack} className="flex items-center space-x-2 text-[#446C73] hover:text-[#414B5C]">
               <ArrowLeft className="w-4 h-4" />
               <span>返回</span>
             </Button>
-            
-            {/* 博物馆Logo */}
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gradient-to-br from-[#446C73] to-[#CF6844] rounded-lg flex items-center justify-center">
                 <div className="w-4 h-2 bg-white rounded-sm"></div>
@@ -129,34 +134,22 @@ export default function AIImageCreation() {
                 <div className="text-xs text-[#446C73]">MUSEUM OF WU</div>
               </div>
             </div>
-            
-            <div className="w-20"></div> {/* 占位符，保持居中 */}
+            <div className="w-20"></div>
           </div>
         </div>
       </div>
-
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-[#414B5C]">选择您想要二创的展品</h1>
         </div>
-
-        {/* 水平滚动的展品列表 */}
         <div className="overflow-x-auto whitespace-nowrap pb-4">
           <div className="inline-flex space-x-4">
             {RECREATION_DATA.map((exhibit) => (
-              <Card 
-                key={exhibit.id} 
-                className="w-64 bg-white rounded-lg shadow-md overflow-hidden inline-block"
-                onClick={() => handleExhibitSelect(exhibit.id)}
-              >
+              <Card key={exhibit.id} className="w-64 bg-white rounded-lg shadow-md overflow-hidden inline-block" onClick={() => handleExhibitSelect(exhibit.id)}>
                 <CardContent className="p-4">
                   <h3 className="text-lg font-semibold text-[#414B5C] mb-1">{exhibit.name}</h3>
                   <p className="text-sm text-gray-500 mb-3">{exhibit.dynasty}</p>
-                  <img 
-                    src={exhibit.pic} 
-                    alt={exhibit.name} 
-                    className="w-full h-40 object-cover rounded-md" 
-                  />
+                  <img src={exhibit.pic} alt={exhibit.name} className="w-full h-40 object-cover rounded-md" />
                 </CardContent>
               </Card>
             ))}
@@ -164,7 +157,7 @@ export default function AIImageCreation() {
         </div>
       </div>
     </div>
-  )
+  );
 
   const renderDetailScreen = () => {
     const selectedExhibit = RECREATION_DATA.find(item => item.id === selectedExhibitId)
