@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "transform:newdata": "node scripts/transform-newdata.mjs --input ./newdata.json --output ./data/newInventoryData.json",
+    "merge:inventory": "node scripts/merge-inventory.mjs --base ./public/inventoryDataBase.json --addition ./data/newInventoryData.json --out ./public/inventoryDataBase.json"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
